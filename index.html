@@ -950,6 +950,13 @@ class="w-full p-4 bg-red-50 hover:bg-red-100 border border-red-200 rounded-2xl f
                                 <button onclick="quickActionProduct('${p.id}', 'sales')" title="Registrar venta" class="w-8 h-8 rounded-xl bg-orange-50 hover:bg-orange-100 text-orange-600 flex items-center justify-center active:scale-90 transition">
                                     <i data-lucide="minus" class="w-4 h-4"></i>
                                 </button>
+                                <button onclick="editProductPrice('${p.id}')"
+title="Editar precio"
+class="w-8 h-8 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-600 flex items-center justify-center active:scale-90 transition">
+
+    <i data-lucide="pencil" class="w-4 h-4"></i>
+
+</button>
                             </div>
                         </div>
                     </div>
@@ -1350,7 +1357,40 @@ class="w-full p-4 bg-red-50 hover:bg-red-100 border border-red-200 rounded-2xl f
 
             showToast(`${flavor} (${presentation}) agregado al catálogo`, 'success');
         }
+function editProductPrice(productId) {
 
+    const product =
+        appState.products.find(p => p.id === productId);
+
+    if (!product) return;
+
+    const newPrice = prompt(
+        `Nuevo precio para ${product.flavor} (${product.presentation})`,
+        product.defaultPrice || 0
+    );
+
+    if (newPrice === null) return;
+
+    const price = parseFloat(newPrice);
+
+    if (isNaN(price) || price < 0) {
+        showToast(
+            'Ingrese un precio válido',
+            'error'
+        );
+        return;
+    }
+
+    product.defaultPrice = price;
+
+    saveState();
+    renderAll();
+
+    showToast(
+        'Precio actualizado correctamente',
+        'success'
+    );
+}
         // ==========================================
         // INFORME DE ESTADO ACTUAL DE INVENTARIO
         // ==========================================
