@@ -1,0 +1,1826 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PulpaControl - Inventario de Pulpas de Fruta</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- SheetJS (xlsx) para exportación real a Excel -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        emerald: {
+                            50: '#ecfdf5',
+                            100: '#d1fae5',
+                            500: '#10b981',
+                            600: '#059669',
+                            700: '#047857',
+                        },
+                        orange: {
+                            50: '#fff7ed',
+                            100: '#ffedd5',
+                            500: '#f97316',
+                            600: '#ea580c',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Ajustes específicos para experiencia móvil nativa */
+        body {
+            -webkit-tap-highlight-color: transparent;
+            overscroll-behavior-y: none;
+        }
+        /* Ocultar barras de desplazamiento en contenedores horizontales manteniendo funcionalidad */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        /* Animaciones suaves */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in {
+            animation: fadeIn 0.25s ease-out forwards;
+        }
+        /* Estilos optimizados para Imprimir / Guardar PDF */
+        @media print {
+            body {
+                background-color: #ffffff !important;
+                padding-bottom: 0 !important;
+            }
+            header, nav, .no-print, #toast-container {
+                display: none !important;
+            }
+            main {
+                max-width: 100% !important;
+                padding: 0 !important;
+            }
+            #view-report {
+                display: block !important;
+            }
+            .print-only-header {
+                display: block !important;
+            }
+            .shadow-sm, .shadow-xs, .shadow-md {
+                box-shadow: none !important;
+            }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans antialiased pb-24 select-none">
+
+    <!-- Notificación Toast Flotante -->
+    <div id="toast-container" class="fixed top-16 left-4 right-4 z-50 flex flex-col items-center pointer-events-none gap-2"></div>
+
+    <!-- Cabecera Superior Fija -->
+    <header class="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-sm">
+        <div class="max-w-lg mx-auto px-4 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-2.5">
+                <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white shadow-md shadow-emerald-500/20">
+                    <i data-lucide="citrus" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <h1 class="font-extrabold text-lg leading-tight text-slate-900 tracking-tight">PulpaControl</h1>
+                    <p class="text-[11px] font-medium text-slate-500">Gestión de Inventario</p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2">
+                <!-- Botón Respaldo JSON / Ajustes -->
+                <button onclick="openBackupModal()" title="Respaldo y Configuración" class="p-2.5 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 active:scale-95 transition">
+                    <i data-lucide="database-backup" class="w-5 h-5"></i>
+                </button>
+                <!-- Botón Principal Exportar a Excel -->
+                <button onclick="exportToExcel()" class="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-semibold text-sm shadow-md shadow-emerald-600/20 transition">
+                    <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
+                    <span>Excel</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Contenedor Principal (Mobile-First centrado) -->
+    <main class="max-w-lg mx-auto px-4 pt-4">
+
+        <!-- ========================================== -->
+        <!-- VISTA 1: INVENTARIO ACTUAL                 -->
+        <!-- ========================================== -->
+        <section id="view-inventory" class="space-y-5 animate-fade-in">
+            
+            <!-- Tarjetas Resumen -->
+            <div class="grid grid-cols-3 gap-2.5">
+                <div class="bg-white p-3.5 rounded-2xl border border-slate-200/70 shadow-sm flex flex-col justify-between">
+                    <div class="flex items-center justify-between text-emerald-600 mb-1">
+                        <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Stock Total</span>
+                        <i data-lucide="package" class="w-4 h-4"></i>
+                    </div>
+                    <p id="stat-total-stock" class="text-2xl font-extrabold text-slate-900">0</p>
+                    <p class="text-[11px] text-slate-500 mt-0.5">unidades</p>
+                </div>
+
+                <div class="bg-white p-3.5 rounded-2xl border border-slate-200/70 shadow-sm flex flex-col justify-between">
+                    <div class="flex items-center justify-between text-blue-600 mb-1">
+                        <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Producido</span>
+                        <i data-lucide="plus-circle" class="w-4 h-4"></i>
+                    </div>
+                    <p id="stat-total-produced" class="text-2xl font-extrabold text-slate-900">0</p>
+                    <p class="text-[11px] text-slate-500 mt-0.5">este mes</p>
+                </div>
+
+                <div class="bg-white p-3.5 rounded-2xl border border-slate-200/70 shadow-sm flex flex-col justify-between">
+                    <div class="flex items-center justify-between text-orange-500 mb-1">
+                        <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Vendido</span>
+                        <i data-lucide="shopping-bag" class="w-4 h-4"></i>
+                    </div>
+                    <p id="stat-total-sold" class="text-2xl font-extrabold text-slate-900">0</p>
+                    <p id="stat-sales-revenue" class="text-[11px] font-semibold text-orange-600 mt-0.5 truncate">$0 hoy</p>
+                </div>
+            </div>
+
+            <!-- Barra de Búsqueda y Botón Agregar Producto -->
+            <div class="flex items-center gap-2">
+                <div class="relative flex-1">
+                    <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+                    <input type="text" id="search-inventory" oninput="renderInventory()" placeholder="Buscar sabor o presentación..." 
+                        class="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent shadow-sm">
+                </div>
+                <button onclick="openNewProductModal()" class="p-3 bg-slate-900 hover:bg-slate-800 active:scale-95 text-white rounded-2xl shadow-sm flex items-center gap-1.5 font-semibold text-sm transition shrink-0">
+                    <i data-lucide="plus" class="w-5 h-5"></i>
+                    <span class="hidden sm:inline">Nuevo Sabor</span>
+                </button>
+            </div>
+
+            <!-- Filtros Rápidos por Presentación -->
+            <div id="presentation-filters" class="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
+                <!-- Generado dinámicamente -->
+            </div>
+
+            <!-- Lista de Productos en Stock -->
+            <div class="space-y-3" id="inventory-list">
+                <!-- Generado dinámicamente -->
+            </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- VISTA 2: REGISTRAR PRODUCCIÓN (ENTRADAS)   -->
+        <!-- ========================================== -->
+        <section id="view-production" class="hidden space-y-4 animate-fade-in">
+            <div class="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm">
+                <div class="flex items-center gap-3 mb-5">
+                    <div class="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+                        <i data-lucide="factory" class="w-6 h-6"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-extrabold text-slate-900">Registrar Producción</h2>
+                        <p class="text-xs text-slate-500">Suma unidades nuevas al inventario</p>
+                    </div>
+                </div>
+
+                <form id="form-production" onsubmit="handleProductionSubmit(event)" class="space-y-4">
+                    <!-- Selección de Producto -->
+                    <div>
+                        <div class="flex items-center justify-between mb-1.5">
+                            <label class="block text-xs font-bold uppercase tracking-wider text-slate-600">Sabor y Presentación *</label>
+                            <button type="button" onclick="openNewProductModal('prod')" class="text-xs font-semibold text-emerald-600 hover:underline flex items-center gap-1">
+                                <i data-lucide="plus" class="w-3.5 h-3.5"></i> Crear nuevo
+                            </button>
+                        </div>
+                        <select id="prod-product-id" required onchange="updateProdStockPreview()"
+                            class="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-base font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                            <!-- Opciones dinámicas -->
+                        </select>
+                        <p id="prod-stock-preview" class="text-xs text-slate-500 mt-1.5 pl-1">Stock actual: --</p>
+                    </div>
+
+                    <!-- Cantidad Producida con botones rápidos -->
+                    <div>
+                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">Cantidad Producida (Unidades) *</label>
+                        <div class="flex items-center gap-2">
+                            <button type="button" onclick="adjustInputNumber('prod-qty', -1)" class="w-12 h-12 rounded-2xl bg-slate-100 active:bg-slate-200 flex items-center justify-center text-slate-700 font-bold text-xl shrink-0">-</button>
+                            <input type="number" id="prod-qty" min="1" step="1" required placeholder="Ej. 25"
+                                class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-center text-xl font-extrabold text-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                            <button type="button" onclick="adjustInputNumber('prod-qty', 1)" class="w-12 h-12 rounded-2xl bg-slate-100 active:bg-slate-200 flex items-center justify-center text-slate-700 font-bold text-xl shrink-0">+</button>
+                        </div>
+                        <!-- Botones de incremento rápido -->
+                        <div class="grid grid-cols-4 gap-2 mt-2">
+                            <button type="button" onclick="addQuickQty('prod-qty', 5)" class="py-1.5 bg-emerald-50 text-emerald-700 rounded-xl text-xs font-bold active:scale-95">+5</button>
+                            <button type="button" onclick="addQuickQty('prod-qty', 10)" class="py-1.5 bg-emerald-50 text-emerald-700 rounded-xl text-xs font-bold active:scale-95">+10</button>
+                            <button type="button" onclick="addQuickQty('prod-qty', 20)" class="py-1.5 bg-emerald-50 text-emerald-700 rounded-xl text-xs font-bold active:scale-95">+20</button>
+                            <button type="button" onclick="addQuickQty('prod-qty', 50)" class="py-1.5 bg-emerald-50 text-emerald-700 rounded-xl text-xs font-bold active:scale-95">+50</button>
+                        </div>
+                    </div>
+
+                    <!-- Fecha y Lote -->
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">Fecha *</label>
+                            <input type="date" id="prod-date" required
+                                class="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">Lote (Opcional)</label>
+                            <input type="text" id="prod-batch" placeholder="Ej. L-104"
+                                class="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                        </div>
+                    </div>
+
+                    <!-- Notas -->
+                    <div>
+                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">Notas / Observaciones</label>
+                        <input type="text" id="prod-notes" placeholder="Ej. Fruta madura, turno mañana..."
+                            class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    </div>
+
+                    <button type="submit" class="w-full py-4 mt-2 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-extrabold text-base rounded-2xl shadow-lg shadow-emerald-600/25 flex items-center justify-center gap-2 transition">
+                        <i data-lucide="check-circle-2" class="w-5 h-5"></i>
+                        <span>Guardar Producción</span>
+                    </button>
+                </form>
+            </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- VISTA 3: REGISTRAR VENTAS (SALIDAS)        -->
+        <!-- ========================================== -->
+        <section id="view-sales" class="hidden space-y-4 animate-fade-in">
+            <div class="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm">
+                <div class="flex items-center gap-3 mb-5">
+                    <div class="w-12 h-12 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">
+                        <i data-lucide="shopping-cart" class="w-6 h-6"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-extrabold text-slate-900">Registrar Venta</h2>
+                        <p class="text-xs text-slate-500">Descuenta unidades vendidas del stock</p>
+                    </div>
+                </div>
+
+                <form id="form-sales" onsubmit="handleSaleSubmit(event)" class="space-y-4">
+                    <!-- Selección de Producto -->
+                    <div>
+                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">Sabor y Presentación *</label>
+                        <select id="sale-product-id" required onchange="updateSaleStockPreview()"
+                            class="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-base font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-500">
+                            <!-- Opciones dinámicas -->
+                        </select>
+                        <div class="flex items-center justify-between mt-1.5 px-1">
+                            <span id="sale-stock-preview" class="text-xs font-semibold text-slate-600">Disponible: --</span>
+                            <span id="sale-stock-warning" class="text-xs font-bold text-red-600 hidden">¡Sin stock disponible!</span>
+                        </div>
+                    </div>
+
+                    <!-- Cantidad Vendida -->
+                    <div>
+                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">Cantidad Vendida *</label>
+                        <div class="flex items-center gap-2">
+                            <button type="button" onclick="adjustInputNumber('sale-qty', -1); calculateSaleTotal();" class="w-12 h-12 rounded-2xl bg-slate-100 active:bg-slate-200 flex items-center justify-center text-slate-700 font-bold text-xl shrink-0">-</button>
+                            <input type="number" id="sale-qty" min="1" step="1" required placeholder="Ej. 5" oninput="calculateSaleTotal()"
+                                class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-center text-xl font-extrabold text-orange-600 focus:outline-none focus:ring-2 focus:ring-orange-500">
+                            <button type="button" onclick="adjustInputNumber('sale-qty', 1); calculateSaleTotal();" class="w-12 h-12 rounded-2xl bg-slate-100 active:bg-slate-200 flex items-center justify-center text-slate-700 font-bold text-xl shrink-0">+</button>
+                        </div>
+                    </div>
+
+                    <!-- Precio Unitario y Total Calculado -->
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">Precio Unit. ($)</label>
+                            <input type="number" id="sale-price" min="0" step="any" placeholder="0" oninput="calculateSaleTotal()"
+                                class="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-base font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-500">
+                        </div>
+                        <div class="bg-orange-50/80 border border-orange-200/70 rounded-2xl p-3 flex flex-col justify-center">
+                            <span class="text-[11px] font-bold uppercase text-orange-700/80">Total Venta</span>
+                            <span id="sale-total-display" class="text-lg font-extrabold text-orange-700 truncate">$0</span>
+                        </div>
+                    </div>
+
+                    <!-- Cliente / Canal y Fecha -->
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">Cliente / Canal</label>
+                            <input type="text" id="sale-customer" placeholder="Ej. Restaurante, Tienda..."
+                                class="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">Fecha *</label>
+                            <input type="date" id="sale-date" required
+                                class="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-500">
+                        </div>
+                    </div>
+
+                    <button type="submit" class="w-full py-4 mt-2 bg-orange-500 hover:bg-orange-600 active:scale-[0.99] text-white font-extrabold text-base rounded-2xl shadow-lg shadow-orange-500/25 flex items-center justify-center gap-2 transition">
+                        <i data-lucide="badge-dollar-sign" class="w-5 h-5"></i>
+                        <span>Registrar Venta</span>
+                    </button>
+                </form>
+            </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- VISTA 4: HISTORIAL DE MOVIMIENTOS          -->
+        <!-- ========================================== -->
+        <section id="view-history" class="hidden space-y-4 animate-fade-in">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-lg font-extrabold text-slate-900">Historial</h2>
+                    <p class="text-xs text-slate-500">Entradas de producción y salidas por venta</p>
+                </div>
+                <!-- Filtros tipo pestaña -->
+                <div class="flex bg-slate-200/70 p-1 rounded-xl text-xs font-bold">
+                    <button onclick="setHistoryFilter('ALL')" id="filter-hist-ALL" class="px-3 py-1.5 rounded-lg bg-white text-slate-900 shadow-sm transition">Todos</button>
+                    <button onclick="setHistoryFilter('PROD')" id="filter-hist-PROD" class="px-3 py-1.5 rounded-lg text-slate-600 transition">Prod.</button>
+                    <button onclick="setHistoryFilter('SALE')" id="filter-hist-SALE" class="px-3 py-1.5 rounded-lg text-slate-600 transition">Ventas</button>
+                </div>
+            </div>
+
+            <!-- Lista de Movimientos -->
+            <div id="history-list" class="space-y-2.5">
+                <!-- Generado dinámicamente -->
+            </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- VISTA 5: INFORME DE ESTADO ACTUAL          -->
+        <!-- ========================================== -->
+        <section id="view-report" class="hidden space-y-5 animate-fade-in">
+            <!-- Encabezado exclusivo para impresión / PDF -->
+            <div class="print-only-header hidden border-b-2 border-slate-800 pb-3 mb-4">
+                <h1 class="text-xl font-extrabold text-slate-900">PulpaControl - Informe de Estado Actual de Inventario</h1>
+                <p id="print-report-date" class="text-xs text-slate-600 mt-1"></p>
+            </div>
+
+            <!-- Cabecera del Informe y Acciones Rápidas -->
+            <div class="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-sm space-y-3.5">
+                <div class="flex items-start justify-between gap-2">
+                    <div>
+                        <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-indigo-50 text-indigo-700 mb-1">
+                            <i data-lucide="file-bar-chart-2" class="w-3 h-3"></i> Corte en Tiempo Real
+                        </span>
+                        <h2 class="text-lg font-extrabold text-slate-900 leading-tight">Estado Actual de Inventario</h2>
+                        <p id="report-timestamp" class="text-xs text-slate-500 mt-0.5">Actualizado hoy</p>
+                    </div>
+                    <button onclick="window.print()" title="Imprimir o Guardar PDF" class="no-print p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 transition shrink-0">
+                        <i data-lucide="printer" class="w-5 h-5"></i>
+                    </button>
+                </div>
+
+                <!-- Botones de Compartir y Exportar -->
+                <div class="grid grid-cols-3 gap-2 no-print">
+                    <button onclick="shareReportWhatsApp()" class="py-2.5 px-2 bg-[#25D366] hover:bg-[#20bd5a] active:scale-95 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs transition">
+                        <i data-lucide="share-2" class="w-4 h-4 shrink-0"></i>
+                        <span>WhatsApp</span>
+                    </button>
+                    <button onclick="copyReportToClipboard()" class="py-2.5 px-2 bg-slate-800 hover:bg-slate-900 active:scale-95 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs transition">
+                        <i data-lucide="copy" class="w-4 h-4 shrink-0"></i>
+                        <span>Copiar</span>
+                    </button>
+                    <button onclick="exportToExcel()" class="py-2.5 px-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs transition">
+                        <i data-lucide="file-spreadsheet" class="w-4 h-4 shrink-0"></i>
+                        <span>Excel</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Tarjetas Ejecutivas KPI (2x2) -->
+            <div class="grid grid-cols-2 gap-3">
+                <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
+                    <div class="flex items-center justify-between text-emerald-600 mb-1">
+                        <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Unidades Totales</span>
+                        <i data-lucide="boxes" class="w-4 h-4"></i>
+                    </div>
+                    <p id="rep-kpi-units" class="text-2xl font-extrabold text-slate-900">0</p>
+                    <p id="rep-kpi-refs" class="text-[11px] text-slate-500 mt-0.5">0 referencias activas</p>
+                </div>
+
+                <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
+                    <div class="flex items-center justify-between text-indigo-600 mb-1">
+                        <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Peso Total Neto</span>
+                        <i data-lucide="scale" class="w-4 h-4"></i>
+                    </div>
+                    <p id="rep-kpi-weight" class="text-2xl font-extrabold text-indigo-700">0 kg</p>
+                    <p class="text-[11px] text-slate-500 mt-0.5">en pulpa congelada</p>
+                </div>
+
+                <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
+                    <div class="flex items-center justify-between text-blue-600 mb-1">
+                        <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Valorización</span>
+                        <i data-lucide="wallet" class="w-4 h-4"></i>
+                    </div>
+                    <p id="rep-kpi-value" class="text-xl font-extrabold text-slate-900 truncate">$0</p>
+                    <p class="text-[11px] text-slate-500 mt-0.5">precio venta estimado</p>
+                </div>
+
+                <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
+                    <div class="flex items-center justify-between text-amber-600 mb-1">
+                        <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Alertas Stock</span>
+                        <i data-lucide="alert-circle" class="w-4 h-4"></i>
+                    </div>
+                    <p id="rep-kpi-critical" class="text-2xl font-extrabold text-amber-600">0</p>
+                    <p id="rep-kpi-critical-sub" class="text-[11px] text-slate-500 mt-0.5">0 agotados • 0 bajos</p>
+                </div>
+            </div>
+
+            <!-- Distribución Visual por Presentación y Sabor -->
+            <div class="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-xs space-y-4">
+                <div>
+                    <h3 class="text-xs font-extrabold uppercase tracking-wider text-slate-700 mb-2.5 flex items-center gap-1.5">
+                        <i data-lucide="pie-chart" class="w-4 h-4 text-indigo-600"></i>
+                        <span>Resumen por Presentación</span>
+                    </h3>
+                    <div id="rep-presentation-breakdown" class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        <!-- Generado dinámicamente -->
+                    </div>
+                </div>
+
+                <div class="pt-3 border-t border-slate-100">
+                    <h3 class="text-xs font-extrabold uppercase tracking-wider text-slate-700 mb-3 flex items-center gap-1.5">
+                        <i data-lucide="bar-chart-3" class="w-4 h-4 text-emerald-600"></i>
+                        <span>Nivel de Existencias por Sabor (kg)</span>
+                    </h3>
+                    <div id="rep-flavor-bars" class="space-y-2.5">
+                        <!-- Barras horizontales dinámicas -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tabla Detallada de Estado Actual -->
+            <div class="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
+                <div class="p-4 border-b border-slate-100 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-sm font-extrabold text-slate-900">Detalle por Referencia</h3>
+                        <span id="rep-table-count" class="text-xs font-semibold text-slate-500">0 ítems</span>
+                    </div>
+                    <!-- Filtros de Estado -->
+                    <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar no-print">
+                        <button onclick="setReportStatusFilter('ALL')" id="rep-filter-ALL" class="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-900 text-white transition">Todos</button>
+                        <button onclick="setReportStatusFilter('OPTIMAL')" id="rep-filter-OPTIMAL" class="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 text-slate-600 transition">Óptimo</button>
+                        <button onclick="setReportStatusFilter('LOW')" id="rep-filter-LOW" class="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 text-slate-600 transition">Stock Bajo</button>
+                        <button onclick="setReportStatusFilter('OUT')" id="rep-filter-OUT" class="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 text-slate-600 transition">Agotado</button>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-slate-50/90 border-b border-slate-200/80 text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
+                                <th class="py-3 px-3.5">Producto</th>
+                                <th class="py-3 px-2 text-right">Stock</th>
+                                <th class="py-3 px-2 text-right">Peso</th>
+                                <th class="py-3 px-2 text-right">Valor</th>
+                                <th class="py-3 px-3.5 text-center">Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody id="rep-table-body" class="divide-y divide-slate-100 text-xs">
+                            <!-- Filas dinámicas -->
+                        </tbody>
+                        <tfoot id="rep-table-foot" class="bg-slate-50 font-extrabold text-xs text-slate-900 border-t-2 border-slate-200">
+                            <!-- Totales dinámicos -->
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- ========================================== -->
+    <!-- BARRA DE NAVEGACIÓN INFERIOR FIJA          -->
+    <!-- ========================================== -->
+    <nav class="fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-slate-200/90 shadow-[0_-4px_20px_rgba(0,0,0,0.04)] pb-safe">
+        <div class="max-w-lg mx-auto grid grid-cols-5 h-18 px-1.5 py-1.5">
+            <button onclick="switchTab('inventory')" id="nav-inventory" class="flex flex-col items-center justify-center gap-1 py-1.5 rounded-2xl text-emerald-600 bg-emerald-50/80 font-bold transition">
+                <i data-lucide="layout-grid" class="w-5 h-5"></i>
+                <span class="text-[10px]">Inventario</span>
+            </button>
+            <button onclick="switchTab('production')" id="nav-production" class="flex flex-col items-center justify-center gap-1 py-1.5 rounded-2xl text-slate-500 hover:text-slate-800 font-medium transition">
+                <i data-lucide="plus-circle" class="w-5 h-5"></i>
+                <span class="text-[10px]">+ Producc.</span>
+            </button>
+            <button onclick="switchTab('sales')" id="nav-sales" class="flex flex-col items-center justify-center gap-1 py-1.5 rounded-2xl text-slate-500 hover:text-slate-800 font-medium transition">
+                <i data-lucide="minus-circle" class="w-5 h-5"></i>
+                <span class="text-[10px]">- Venta</span>
+            </button>
+            <button onclick="switchTab('report')" id="nav-report" class="flex flex-col items-center justify-center gap-1 py-1.5 rounded-2xl text-slate-500 hover:text-slate-800 font-medium transition">
+                <i data-lucide="file-bar-chart-2" class="w-5 h-5"></i>
+                <span class="text-[10px]">Informe</span>
+            </button>
+            <button onclick="switchTab('history')" id="nav-history" class="flex flex-col items-center justify-center gap-1 py-1.5 rounded-2xl text-slate-500 hover:text-slate-800 font-medium transition">
+                <i data-lucide="history" class="w-5 h-5"></i>
+                <span class="text-[10px]">Historial</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- ========================================== -->
+    <!-- MODAL: NUEVO SABOR / PRESENTACIÓN          -->
+    <!-- ========================================== -->
+    <div id="modal-new-product" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs hidden items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl animate-fade-in">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-extrabold text-slate-900">Agregar Sabor / Producto</h3>
+                <button onclick="closeNewProductModal()" class="p-2 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            
+            <form onsubmit="handleAddNewProduct(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">Nombre de la Fruta / Sabor *</label>
+                    <input type="text" id="new-prod-flavor" required placeholder="Ej. Tamarindo, Borojó, Mango..."
+                        class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-base font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">Presentación *</label>
+                        <select id="new-prod-presentation" onchange="toggleCustomPresentation()"
+                            class="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                            <option value="250gr">250gr</option>
+                            <option value="400gr" selected>400gr</option>
+                            <option value="500gr">500gr</option>
+                            <option value="1kg">1kg (1000gr)</option>
+                            <option value="2.5kg">2.5kg (Institucional)</option>
+                            <option value="CUSTOM">Otra...</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">Precio Sugerido ($)</label>
+                        <input type="number" id="new-prod-price" min="0" step="any" placeholder="Ej. 4500"
+                            class="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    </div>
+                </div>
+
+                <div id="custom-presentation-container" class="hidden">
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">Especificar Presentación *</label>
+                    <input type="text" id="new-prod-custom-pres" placeholder="Ej. 150g, 5kg..."
+                        class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">Stock Inicial</label>
+                        <input type="number" id="new-prod-stock" min="0" value="0"
+                            class="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">Alerta Stock Bajo</label>
+                        <input type="number" id="new-prod-min" min="1" value="10"
+                            class="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    </div>
+                </div>
+
+                <button type="submit" class="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-2xl shadow-md transition">
+                    Guardar Producto
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MODAL: RESPALDO / RESTAURACIÓN JSON        -->
+    <!-- ========================================== -->
+    <div id="modal-backup" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs hidden items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl animate-fade-in space-y-5">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h3 class="text-lg font-extrabold text-slate-900">Datos y Respaldo</h3>
+                    <p class="text-xs text-slate-500">Guarda una copia si cambias de celular</p>
+                </div>
+                <button onclick="closeBackupModal()" class="p-2 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <div class="space-y-3">
+                <button onclick="exportToExcel(); closeBackupModal();" class="w-full p-4 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-2xl flex items-center gap-3 text-left transition">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                        <i data-lucide="file-spreadsheet" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <p class="font-bold text-emerald-950 text-sm">Descargar Reporte Excel (.xlsx)</p>
+                        <p class="text-xs text-emerald-700">Incluye hojas de inventario, producción y ventas</p>
+                    </div>
+                </button>
+
+                <button onclick="downloadJSONBackup()" class="w-full p-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-2xl flex items-center gap-3 text-left transition">
+                    <div class="w-10 h-10 rounded-xl bg-slate-800 text-white flex items-center justify-center shrink-0">
+                        <i data-lucide="download" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <p class="font-bold text-slate-900 text-sm">Exportar Copia de Seguridad (.json)</p>
+                        <p class="text-xs text-slate-500">Archivo completo para restaurar en otro dispositivo</p>
+                    </div>
+                </button>
+
+                <label class="w-full p-4 bg-blue-50/70 hover:bg-blue-100/70 border border-blue-200 rounded-2xl flex items-center gap-3 text-left cursor-pointer transition">
+                    <div class="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0">
+                        <i data-lucide="upload" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <p class="font-bold text-blue-950 text-sm">Restaurar desde Respaldo (.json)</p>
+                        <p class="text-xs text-blue-700">Selecciona un archivo previamente guardado</p>
+                    </div>
+                    <input type="file" accept=".json" onchange="restoreJSONBackup(event)" class="hidden">
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MODAL: CONFIRMACIÓN PERSONALIZADA          -->
+    <!-- ========================================== -->
+    <div id="modal-confirm" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs hidden items-center justify-center p-4">
+        <div class="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-fade-in text-center space-y-4">
+            <div class="w-12 h-12 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center mx-auto">
+                <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+            </div>
+            <div>
+                <h3 id="confirm-title" class="text-lg font-extrabold text-slate-900">¿Estás seguro?</h3>
+                <p id="confirm-message" class="text-sm text-slate-500 mt-1">Esta acción revertirá el inventario.</p>
+            </div>
+            <div class="grid grid-cols-2 gap-3 pt-2">
+                <button onclick="closeConfirmModal()" class="py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-2xl text-sm transition">Cancelar</button>
+                <button id="confirm-btn-yes" class="py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-2xl text-sm shadow-md shadow-red-600/20 transition">Sí, eliminar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- LÓGICA JAVASCRIPT DE LA APLICACIÓN         -->
+    <!-- ========================================== -->
+    <script>
+        // Clave de almacenamiento local
+        const STORAGE_KEY = 'pulpacontrol_data_v1';
+
+        // Estado global de la aplicación
+        let appState = {
+            products: [],
+            movements: [] // { id, type: 'PROD' | 'SALE', productId, flavor, presentation, qty, price, total, batchOrCustomer, notes, date, createdAt }
+        };
+
+        // Filtros UI activos
+        let currentTab = 'inventory';
+        let selectedPresentationFilter = 'ALL';
+        let currentHistoryFilter = 'ALL';
+        let currentReportStatusFilter = 'ALL';
+        let returnToTabAfterNewProduct = null;
+
+        // ==========================================
+        // INICIALIZACIÓN Y PERSISTENCIA
+        // ==========================================
+        window.onload = function() {
+            loadState();
+            const today = getTodayISO();
+            const prodDateEl = document.getElementById('prod-date');
+            const saleDateEl = document.getElementById('sale-date');
+            if (prodDateEl) prodDateEl.value = today;
+            if (saleDateEl) saleDateEl.value = today;
+            renderAll();
+        };
+
+        function getTodayISO() {
+            const now = new Date();
+            const offset = now.getTimezoneOffset();
+            const localDate = new Date(now.getTime() - (offset * 60 * 1000));
+            return localDate.toISOString().split('T')[0];
+        }
+
+        function formatCurrency(amount) {
+            return '$' + Number(amount || 0).toLocaleString('es-CO');
+        }
+
+        function getFruitEmoji(flavor) {
+            const f = (flavor || '').toLowerCase();
+            if (f.includes('mango')) return '🥭';
+            if (f.includes('mora') || f.includes('arándano') || f.includes('uva')) return '🫐';
+            if (f.includes('fresa') || f.includes('frutilla')) return '🍓';
+            if (f.includes('maracuyá') || f.includes('maracuya') || f.includes('lulo')) return '🟡';
+            if (f.includes('guanábana') || f.includes('guanabana')) return '🍈';
+            if (f.includes('piña') || f.includes('pina')) return '🍍';
+            if (f.includes('limón') || f.includes('limon')) return '🍋';
+            if (f.includes('naranja') || f.includes('mandarina')) return '🍊';
+            if (f.includes('guayaba') || f.includes('sandía') || f.includes('sandia')) return '🍉';
+            if (f.includes('coco')) return '🥥';
+            if (f.includes('durazno') || f.includes('melocotón')) return '🍑';
+            if (f.includes('cereza')) return '🍒';
+            if (f.includes('aguacate')) return '🥑';
+            return '🍹';
+        }
+
+        function loadState() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    appState.products = Array.isArray(parsed.products) ? parsed.products : [];
+                    appState.movements = Array.isArray(parsed.movements) ? parsed.movements : [];
+                } else {
+                    // Catálogo inicial por defecto para comenzar rápido (presentación estándar 400gr)
+                    const today = getTodayISO();
+                    appState.products = [
+                        { id: 'p1', flavor: 'Mango', presentation: '400gr', stock: 24, minStock: 10, defaultPrice: 4500, emoji: '🥭' },
+                        { id: 'p2', flavor: 'Mora', presentation: '400gr', stock: 18, minStock: 10, defaultPrice: 4200, emoji: '🫐' },
+                        { id: 'p3', flavor: 'Maracuyá', presentation: '400gr', stock: 8, minStock: 10, defaultPrice: 5000, emoji: '🟡' },
+                        { id: 'p4', flavor: 'Lulo', presentation: '400gr', stock: 15, minStock: 8, defaultPrice: 4800, emoji: '🟢' },
+                        { id: 'p5', flavor: 'Guanábana', presentation: '1kg', stock: 12, minStock: 6, defaultPrice: 8500, emoji: '🍈' },
+                        { id: 'p6', flavor: 'Fresa', presentation: '400gr', stock: 0, minStock: 10, defaultPrice: 4800, emoji: '🍓' }
+                    ];
+                    appState.movements = [
+                        { id: 'm1', type: 'PROD', productId: 'p1', flavor: 'Mango', presentation: '400gr', qty: 30, price: 0, total: 0, batchOrCustomer: 'L-001', notes: 'Producción inicial', date: today, createdAt: Date.now() - 3600000 },
+                        { id: 'm2', type: 'SALE', productId: 'p1', flavor: 'Mango', presentation: '400gr', qty: 6, price: 4500, total: 27000, batchOrCustomer: 'Cliente Mostrador', notes: '', date: today, createdAt: Date.now() - 1800000 }
+                    ];
+                    saveState();
+                }
+            } catch (e) {
+                console.error('Error cargando estado:', e);
+            }
+        }
+
+        function saveState() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
+            } catch (e) {
+                showToast('No se pudo guardar en el navegador', 'error');
+            }
+        }
+
+        // Renderizar toda la interfaz
+        function renderAll() {
+            updateSummaryStats();
+            renderPresentationFilters();
+            renderInventory();
+            populateProductSelects();
+            renderHistory();
+            renderReport();
+            lucide.createIcons();
+        }
+
+        // ==========================================
+        // NAVEGACIÓN ENTRE PESTAÑAS
+        // ==========================================
+        function switchTab(tabName) {
+            currentTab = tabName;
+            const views = ['inventory', 'production', 'sales', 'report', 'history'];
+            
+            views.forEach(v => {
+                const section = document.getElementById(`view-${v}`);
+                const navBtn = document.getElementById(`nav-${v}`);
+                if (!section || !navBtn) return;
+                
+                if (v === tabName) {
+                    section.classList.remove('hidden');
+                    navBtn.classList.remove('text-slate-500', 'font-medium');
+                    navBtn.classList.remove('text-emerald-600', 'bg-emerald-50/80', 'text-orange-600', 'bg-orange-50/90', 'text-indigo-600', 'bg-indigo-50/90');
+                    
+                    if (v === 'sales') {
+                        navBtn.classList.add('text-orange-600', 'bg-orange-50/90', 'font-bold');
+                    } else if (v === 'report') {
+                        navBtn.classList.add('text-indigo-600', 'bg-indigo-50/90', 'font-bold');
+                    } else {
+                        navBtn.classList.add('text-emerald-600', 'bg-emerald-50/80', 'font-bold');
+                    }
+                } else {
+                    section.classList.add('hidden');
+                    navBtn.classList.remove('text-emerald-600', 'bg-emerald-50/80', 'text-orange-600', 'bg-orange-50/90', 'text-indigo-600', 'bg-indigo-50/90', 'font-bold');
+                    navBtn.classList.add('text-slate-500', 'font-medium');
+                }
+            });
+
+            if (tabName === 'production') updateProdStockPreview();
+            if (tabName === 'sales') updateSaleStockPreview();
+            if (tabName === 'report') renderReport();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // ==========================================
+        // INVENTARIO Y RESUMEN PRINCIPAL
+        // ==========================================
+        function updateSummaryStats() {
+            const totalStock = appState.products.reduce((sum, p) => sum + (Number(p.stock) || 0), 0);
+            const currentMonth = getTodayISO().slice(0, 7); // YYYY-MM
+            const today = getTodayISO();
+
+            let monthProduced = 0;
+            let monthSold = 0;
+            let todayRevenue = 0;
+
+            appState.movements.forEach(m => {
+                if (m.type === 'PROD' && (m.date || '').startsWith(currentMonth)) {
+                    monthProduced += Number(m.qty) || 0;
+                }
+                if (m.type === 'SALE') {
+                    if ((m.date || '').startsWith(currentMonth)) {
+                        monthSold += Number(m.qty) || 0;
+                    }
+                    if (m.date === today) {
+                        todayRevenue += Number(m.total) || 0;
+                    }
+                }
+            });
+
+            document.getElementById('stat-total-stock').textContent = totalStock;
+            document.getElementById('stat-total-produced').textContent = monthProduced;
+            document.getElementById('stat-total-sold').textContent = monthSold;
+            document.getElementById('stat-sales-revenue').textContent = `${formatCurrency(todayRevenue)} hoy`;
+        }
+
+        function renderPresentationFilters() {
+            const container = document.getElementById('presentation-filters');
+            const presentations = ['ALL', ...new Set(appState.products.map(p => p.presentation))];
+
+            container.innerHTML = presentations.map(pres => {
+                const isActive = selectedPresentationFilter === pres;
+                const label = pres === 'ALL' ? 'Todas' : pres;
+                const classes = isActive
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100';
+                return `
+                    <button onclick="setPresentationFilter('${pres}')" class="px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition ${classes}">
+                        ${label}
+                    </button>
+                `;
+            }).join('');
+        }
+
+        function setPresentationFilter(pres) {
+            selectedPresentationFilter = pres;
+            renderPresentationFilters();
+            renderInventory();
+        }
+
+        function renderInventory() {
+            const listEl = document.getElementById('inventory-list');
+            const query = (document.getElementById('search-inventory').value || '').toLowerCase().trim();
+
+            const filtered = appState.products.filter(p => {
+                const matchesPres = selectedPresentationFilter === 'ALL' || p.presentation === selectedPresentationFilter;
+                const matchesQuery = p.flavor.toLowerCase().includes(query) || p.presentation.toLowerCase().includes(query);
+                return matchesPres && matchesQuery;
+            });
+
+            if (filtered.length === 0) {
+                listEl.innerHTML = `
+                    <div class="bg-white rounded-3xl p-8 text-center border border-slate-200/70">
+                        <p class="text-sm font-bold text-slate-700">No se encontraron pulpas</p>
+                        <p class="text-xs text-slate-400 mt-1">Intenta con otro término o agrega un sabor nuevo.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            listEl.innerHTML = filtered.map(p => {
+                const stock = Number(p.stock) || 0;
+                const minStock = Number(p.minStock) || 5;
+                const emoji = p.emoji || getFruitEmoji(p.flavor);
+
+                let badgeHtml = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700">Disponible</span>`;
+                let borderClass = 'border-slate-200/80';
+
+                if (stock === 0) {
+                    badgeHtml = `<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-red-100 text-red-700">Agotado</span>`;
+                    borderClass = 'border-red-200 bg-red-50/20';
+                } else if (stock <= minStock) {
+                    badgeHtml = `<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-800">Stock Bajo</span>`;
+                    borderClass = 'border-amber-200';
+                }
+
+                return `
+                    <div class="bg-white p-4 rounded-2xl border ${borderClass} shadow-xs flex items-center justify-between gap-3">
+                        <div class="flex items-center gap-3 min-w-0">
+                            <div class="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center text-2xl shrink-0">
+                                ${emoji}
+                            </div>
+                            <div class="min-w-0">
+                                <div class="flex items-center gap-1.5 flex-wrap">
+                                    <h3 class="font-extrabold text-slate-900 text-base truncate">${p.flavor}</h3>
+                                    <span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[11px] font-bold">${p.presentation}</span>
+                                </div>
+                                <div class="flex items-center gap-2 mt-1">
+                                    ${badgeHtml}
+                                    ${p.defaultPrice ? `<span class="text-[11px] font-medium text-slate-400">${formatCurrency(p.defaultPrice)}</span>` : ''}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-2 shrink-0">
+                            <div class="text-right mr-1">
+                                <span class="block text-xl font-extrabold ${stock === 0 ? 'text-red-600' : 'text-slate-900'} leading-none">${stock}</span>
+                                <span class="text-[10px] font-semibold text-slate-400 uppercase">unds</span>
+                            </div>
+                            <div class="flex flex-col gap-1">
+                                <button onclick="quickActionProduct('${p.id}', 'production')" title="Sumar producción" class="w-8 h-8 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 flex items-center justify-center active:scale-90 transition">
+                                    <i data-lucide="plus" class="w-4 h-4"></i>
+                                </button>
+                                <button onclick="quickActionProduct('${p.id}', 'sales')" title="Registrar venta" class="w-8 h-8 rounded-xl bg-orange-50 hover:bg-orange-100 text-orange-600 flex items-center justify-center active:scale-90 transition">
+                                    <i data-lucide="minus" class="w-4 h-4"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            lucide.createIcons();
+        }
+
+        function quickActionProduct(productId, targetTab) {
+            switchTab(targetTab);
+            if (targetTab === 'production') {
+                document.getElementById('prod-product-id').value = productId;
+                updateProdStockPreview();
+            } else if (targetTab === 'sales') {
+                document.getElementById('sale-product-id').value = productId;
+                updateSaleStockPreview();
+            }
+        }
+
+        // ==========================================
+        // FORMULARIOS DE PRODUCCIÓN Y VENTAS
+        // ==========================================
+        function populateProductSelects() {
+            const prodSelect = document.getElementById('prod-product-id');
+            const saleSelect = document.getElementById('sale-product-id');
+
+            const optionsHtml = appState.products.map(p => 
+                `<option value="${p.id}">${p.flavor} (${p.presentation}) — Stock: ${p.stock}</option>`
+            ).join('');
+
+            const prevProd = prodSelect.value;
+            const prevSale = saleSelect.value;
+
+            prodSelect.innerHTML = optionsHtml;
+            saleSelect.innerHTML = optionsHtml;
+
+            if (prevProd && appState.products.some(p => p.id === prevProd)) prodSelect.value = prevProd;
+            if (prevSale && appState.products.some(p => p.id === prevSale)) saleSelect.value = prevSale;
+
+            updateProdStockPreview();
+            updateSaleStockPreview();
+        }
+
+        function adjustInputNumber(inputId, delta) {
+            const input = document.getElementById(inputId);
+            const current = parseInt(input.value, 10) || 0;
+            const next = Math.max(1, current + delta);
+            input.value = next;
+        }
+
+        function addQuickQty(inputId, amount) {
+            const input = document.getElementById(inputId);
+            const current = parseInt(input.value, 10) || 0;
+            input.value = current + amount;
+        }
+
+        function updateProdStockPreview() {
+            const id = document.getElementById('prod-product-id').value;
+            const product = appState.products.find(p => p.id === id);
+            const preview = document.getElementById('prod-stock-preview');
+            if (product) {
+                preview.textContent = `Stock actual en bodega: ${product.stock} unidades`;
+            }
+        }
+
+        function handleProductionSubmit(event) {
+            event.preventDefault();
+            const productId = document.getElementById('prod-product-id').value;
+            const qty = parseInt(document.getElementById('prod-qty').value, 10);
+            const date = document.getElementById('prod-date').value || getTodayISO();
+            const batch = document.getElementById('prod-batch').value.trim();
+            const notes = document.getElementById('prod-notes').value.trim();
+
+            if (!productId || isNaN(qty) || qty <= 0) {
+                showToast('Ingresa una cantidad válida mayor a 0', 'error');
+                return;
+            }
+
+            const product = appState.products.find(p => p.id === productId);
+            if (!product) return;
+
+            product.stock = (Number(product.stock) || 0) + qty;
+
+            appState.movements.unshift({
+                id: 'mov_' + Date.now(),
+                type: 'PROD',
+                productId: product.id,
+                flavor: product.flavor,
+                presentation: product.presentation,
+                qty: qty,
+                price: 0,
+                total: 0,
+                batchOrCustomer: batch,
+                notes: notes,
+                date: date,
+                createdAt: Date.now()
+            });
+
+            saveState();
+            document.getElementById('prod-qty').value = '';
+            document.getElementById('prod-batch').value = '';
+            document.getElementById('prod-notes').value = '';
+            renderAll();
+            showToast(`+${qty} unds de ${product.flavor} (${product.presentation}) agregadas`, 'success');
+        }
+
+        function updateSaleStockPreview() {
+            const id = document.getElementById('sale-product-id').value;
+            const product = appState.products.find(p => p.id === id);
+            const preview = document.getElementById('sale-stock-preview');
+            const warning = document.getElementById('sale-stock-warning');
+            const priceInput = document.getElementById('sale-price');
+
+            if (product) {
+                preview.textContent = `Disponible: ${product.stock} unidades`;
+                if (product.defaultPrice) {
+                    priceInput.value = product.defaultPrice;
+                }
+                if (product.stock <= 0) {
+                    warning.classList.remove('hidden');
+                } else {
+                    warning.classList.add('hidden');
+                }
+                calculateSaleTotal();
+            }
+        }
+
+        function calculateSaleTotal() {
+            const qty = parseFloat(document.getElementById('sale-qty').value) || 0;
+            const price = parseFloat(document.getElementById('sale-price').value) || 0;
+            const total = qty * price;
+            document.getElementById('sale-total-display').textContent = formatCurrency(total);
+        }
+
+        function handleSaleSubmit(event) {
+            event.preventDefault();
+            const productId = document.getElementById('sale-product-id').value;
+            const qty = parseInt(document.getElementById('sale-qty').value, 10);
+            const price = parseFloat(document.getElementById('sale-price').value) || 0;
+            const customer = document.getElementById('sale-customer').value.trim();
+            const date = document.getElementById('sale-date').value || getTodayISO();
+
+            if (!productId || isNaN(qty) || qty <= 0) {
+                showToast('Ingresa una cantidad vendida válida', 'error');
+                return;
+            }
+
+            const product = appState.products.find(p => p.id === productId);
+            if (!product) return;
+
+            if (qty > product.stock) {
+                showToast(`Stock insuficiente. Solo hay ${product.stock} unidades disponibles`, 'error');
+                return;
+            }
+
+            product.stock = Number(product.stock) - qty;
+            if (price > 0) {
+                product.defaultPrice = price;
+            }
+
+            const total = qty * price;
+
+            appState.movements.unshift({
+                id: 'mov_' + Date.now(),
+                type: 'SALE',
+                productId: product.id,
+                flavor: product.flavor,
+                presentation: product.presentation,
+                qty: qty,
+                price: price,
+                total: total,
+                batchOrCustomer: customer,
+                notes: '',
+                date: date,
+                createdAt: Date.now()
+            });
+
+            saveState();
+            document.getElementById('sale-qty').value = '';
+            document.getElementById('sale-customer').value = '';
+            calculateSaleTotal();
+            renderAll();
+            showToast(`Venta registrada: ${qty} unds de ${product.flavor}`, 'success');
+        }
+
+        // ==========================================
+        // HISTORIAL Y REVERSIÓN DE MOVIMIENTOS
+        // ==========================================
+        function setHistoryFilter(filter) {
+            currentHistoryFilter = filter;
+            ['ALL', 'PROD', 'SALE'].forEach(f => {
+                const btn = document.getElementById(`filter-hist-${f}`);
+                if (!btn) return;
+                if (f === filter) {
+                    btn.classList.add('bg-white', 'text-slate-900', 'shadow-sm');
+                    btn.classList.remove('text-slate-600');
+                } else {
+                    btn.classList.remove('bg-white', 'text-slate-900', 'shadow-sm');
+                    btn.classList.add('text-slate-600');
+                }
+            });
+            renderHistory();
+        }
+
+        function renderHistory() {
+            const container = document.getElementById('history-list');
+            const filtered = appState.movements.filter(m => {
+                if (currentHistoryFilter === 'ALL') return true;
+                return m.type === currentHistoryFilter;
+            });
+
+            if (filtered.length === 0) {
+                container.innerHTML = `
+                    <div class="bg-white rounded-3xl p-8 text-center border border-slate-200/70">
+                        <p class="text-sm font-bold text-slate-700">Sin movimientos registrados</p>
+                        <p class="text-xs text-slate-400 mt-1">Aquí aparecerán tus entradas de producción y ventas.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = filtered.map(m => {
+                const isProd = m.type === 'PROD';
+                const badgeClass = isProd ? 'bg-emerald-100 text-emerald-700' : 'bg-orange-100 text-orange-700';
+                const sign = isProd ? '+' : '-';
+                const qtyColor = isProd ? 'text-emerald-600' : 'text-orange-600';
+                const extraInfo = m.batchOrCustomer
+                    ? (isProd ? `Lote: ${m.batchOrCustomer}` : `Cliente: ${m.batchOrCustomer}`)
+                    : (m.notes || '');
+
+                return `
+                    <div class="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between gap-3">
+                        <div class="min-w-0">
+                            <div class="flex items-center gap-2">
+                                <span class="px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase ${badgeClass}">
+                                    ${isProd ? 'Producción' : 'Venta'}
+                                </span>
+                                <span class="text-[11px] font-medium text-slate-400">${m.date}</span>
+                            </div>
+                            <p class="font-bold text-slate-900 text-sm mt-1 truncate">
+                                ${m.flavor} <span class="text-slate-500 font-semibold">(${m.presentation})</span>
+                            </p>
+                            ${extraInfo ? `<p class="text-xs text-slate-500 truncate mt-0.5">${extraInfo}</p>` : ''}
+                        </div>
+
+                        <div class="flex items-center gap-2.5 shrink-0">
+                            <div class="text-right">
+                                <span class="block font-extrabold text-base ${qtyColor}">${sign}${m.qty}</span>
+                                ${!isProd && m.total > 0 ? `<span class="text-[11px] font-semibold text-slate-500">${formatCurrency(m.total)}</span>` : ''}
+                            </div>
+                            <button onclick="askDeleteMovement('${m.id}')" title="Eliminar y revertir stock" class="p-2 rounded-xl text-slate-400 hover:text-red-600 hover:bg-red-50 transition">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            lucide.createIcons();
+        }
+
+        function askDeleteMovement(movId) {
+            const mov = appState.movements.find(m => m.id === movId);
+            if (!mov) return;
+
+            const modal = document.getElementById('modal-confirm');
+            document.getElementById('confirm-title').textContent = '¿Eliminar registro?';
+            document.getElementById('confirm-message').textContent = mov.type === 'PROD'
+                ? `Se restarán ${mov.qty} unds de ${mov.flavor} (${mov.presentation}) del stock actual.`
+                : `Se devolverán ${mov.qty} unds de ${mov.flavor} (${mov.presentation}) al stock actual.`;
+
+            const yesBtn = document.getElementById('confirm-btn-yes');
+            yesBtn.onclick = function() {
+                deleteMovement(movId);
+                closeConfirmModal();
+            };
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeConfirmModal() {
+            const modal = document.getElementById('modal-confirm');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function deleteMovement(movId) {
+            const index = appState.movements.findIndex(m => m.id === movId);
+            if (index === -1) return;
+
+            const mov = appState.movements[index];
+            const product = appState.products.find(p => p.id === mov.productId);
+
+            if (product) {
+                if (mov.type === 'PROD') {
+                    product.stock = Math.max(0, (Number(product.stock) || 0) - Number(mov.qty));
+                } else if (mov.type === 'SALE') {
+                    product.stock = (Number(product.stock) || 0) + Number(mov.qty);
+                }
+            }
+
+            appState.movements.splice(index, 1);
+            saveState();
+            renderAll();
+            showToast('Movimiento eliminado e inventario actualizado', 'info');
+        }
+
+        // ==========================================
+        // MODAL: AGREGAR NUEVO PRODUCTO / SABOR
+        // ==========================================
+        function openNewProductModal(returnTab = null) {
+            returnToTabAfterNewProduct = returnTab;
+            const modal = document.getElementById('modal-new-product');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            document.getElementById('new-prod-flavor').focus();
+        }
+
+        function closeNewProductModal() {
+            const modal = document.getElementById('modal-new-product');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function toggleCustomPresentation() {
+            const val = document.getElementById('new-prod-presentation').value;
+            const customBox = document.getElementById('custom-presentation-container');
+            if (val === 'CUSTOM') {
+                customBox.classList.remove('hidden');
+            } else {
+                customBox.classList.add('hidden');
+            }
+        }
+
+        function handleAddNewProduct(event) {
+            event.preventDefault();
+            const flavor = document.getElementById('new-prod-flavor').value.trim();
+            const presSelect = document.getElementById('new-prod-presentation').value;
+            const customPres = document.getElementById('new-prod-custom-pres').value.trim();
+            const presentation = presSelect === 'CUSTOM' ? customPres : presSelect;
+            const price = parseFloat(document.getElementById('new-prod-price').value) || 0;
+            const initialStock = parseInt(document.getElementById('new-prod-stock').value, 10) || 0;
+            const minStock = parseInt(document.getElementById('new-prod-min').value, 10) || 10;
+
+            if (!flavor || !presentation) {
+                showToast('Completa el sabor y la presentación', 'error');
+                return;
+            }
+
+            const exists = appState.products.some(
+                p => p.flavor.toLowerCase() === flavor.toLowerCase() && p.presentation.toLowerCase() === presentation.toLowerCase()
+            );
+            if (exists) {
+                showToast('Ese sabor con esa presentación ya existe', 'error');
+                return;
+            }
+
+            const newId = 'p_' + Date.now();
+            appState.products.push({
+                id: newId,
+                flavor,
+                presentation,
+                stock: initialStock,
+                minStock,
+                defaultPrice: price,
+                emoji: getFruitEmoji(flavor)
+            });
+
+            if (initialStock > 0) {
+                appState.movements.unshift({
+                    id: 'mov_' + Date.now(),
+                    type: 'PROD',
+                    productId: newId,
+                    flavor,
+                    presentation,
+                    qty: initialStock,
+                    price: 0,
+                    total: 0,
+                    batchOrCustomer: 'Stock Inicial',
+                    notes: 'Creación de producto',
+                    date: getTodayISO(),
+                    createdAt: Date.now()
+                });
+            }
+
+            saveState();
+            event.target.reset();
+            toggleCustomPresentation();
+            closeNewProductModal();
+            renderAll();
+
+            if (returnToTabAfterNewProduct === 'prod') {
+                document.getElementById('prod-product-id').value = newId;
+                updateProdStockPreview();
+            }
+
+            showToast(`${flavor} (${presentation}) agregado al catálogo`, 'success');
+        }
+
+        // ==========================================
+        // INFORME DE ESTADO ACTUAL DE INVENTARIO
+        // ==========================================
+        // Convertir texto de presentación (ej: "500g", "1kg", "2.5kg", "250 g") a kilogramos
+        function parsePresentationToKg(presentationStr) {
+            if (!presentationStr) return 0;
+            const clean = presentationStr.toLowerCase().replace(/\s+/g, '');
+            const match = clean.match(/^(\d+(?:[.,]\d+)?)(kg|g|gr|ml|l)?$/);
+            if (!match) return 0;
+            
+            const num = parseFloat(match[1].replace(',', '.'));
+            const unit = match[2] || 'g';
+            
+            if (unit === 'kg' || unit === 'l') return num;
+            if (unit === 'g' || unit === 'gr' || unit === 'ml') return num / 1000;
+            return 0;
+        }
+
+        function setReportStatusFilter(status) {
+            currentReportStatusFilter = status;
+            ['ALL', 'OPTIMAL', 'LOW', 'OUT'].forEach(st => {
+                const btn = document.getElementById(`rep-filter-${st}`);
+                if (!btn) return;
+                if (st === status) {
+                    btn.classList.add('bg-slate-900', 'text-white');
+                    btn.classList.remove('bg-slate-100', 'text-slate-600');
+                } else {
+                    btn.classList.remove('bg-slate-900', 'text-white');
+                    btn.classList.add('bg-slate-100', 'text-slate-600');
+                }
+            });
+            renderReport();
+        }
+
+        function getInventoryReportMetrics() {
+            let totalUnits = 0;
+            let totalWeightKg = 0;
+            let totalValue = 0;
+            let outOfStockCount = 0;
+            let lowStockCount = 0;
+
+            const presentationMap = {};
+            const flavorMap = {};
+
+            // Calcular rotación histórica por producto
+            const rotationMap = {};
+            appState.movements.forEach(m => {
+                if (!rotationMap[m.productId]) {
+                    rotationMap[m.productId] = { produced: 0, sold: 0 };
+                }
+                if (m.type === 'PROD') rotationMap[m.productId].produced += Number(m.qty) || 0;
+                if (m.type === 'SALE') rotationMap[m.productId].sold += Number(m.qty) || 0;
+            });
+
+            const items = appState.products.map(p => {
+                const stock = Number(p.stock) || 0;
+                const minStock = Number(p.minStock) || 5;
+                const unitPrice = Number(p.defaultPrice) || 0;
+                const unitWeightKg = parsePresentationToKg(p.presentation);
+                const itemWeightKg = stock * unitWeightKg;
+                const itemValue = stock * unitPrice;
+                const rot = rotationMap[p.id] || { produced: 0, sold: 0 };
+
+                let status = 'OPTIMAL';
+                if (stock === 0) {
+                    status = 'OUT';
+                    outOfStockCount++;
+                } else if (stock <= minStock) {
+                    status = 'LOW';
+                    lowStockCount++;
+                }
+
+                totalUnits += stock;
+                totalWeightKg += itemWeightKg;
+                totalValue += itemValue;
+
+                // Agrupar por presentación
+                if (!presentationMap[p.presentation]) {
+                    presentationMap[p.presentation] = { units: 0, weightKg: 0 };
+                }
+                presentationMap[p.presentation].units += stock;
+                presentationMap[p.presentation].weightKg += itemWeightKg;
+
+                // Agrupar por sabor
+                if (!flavorMap[p.flavor]) {
+                    flavorMap[p.flavor] = { units: 0, weightKg: 0, emoji: p.emoji || getFruitEmoji(p.flavor), hasAlert: false };
+                }
+                flavorMap[p.flavor].units += stock;
+                flavorMap[p.flavor].weightKg += itemWeightKg;
+                if (status !== 'OPTIMAL') flavorMap[p.flavor].hasAlert = true;
+
+                return {
+                    ...p,
+                    stock,
+                    minStock,
+                    unitPrice,
+                    unitWeightKg,
+                    itemWeightKg,
+                    itemValue,
+                    status,
+                    produced: rot.produced,
+                    sold: rot.sold
+                };
+            });
+
+            return {
+                totalUnits,
+                totalWeightKg,
+                totalValue,
+                outOfStockCount,
+                lowStockCount,
+                presentationMap,
+                flavorMap,
+                items
+            };
+        }
+
+        function renderReport() {
+            const metrics = getInventoryReportMetrics();
+            const nowStr = new Date().toLocaleString('es-CO', {
+                dateStyle: 'medium',
+                timeStyle: 'short'
+            });
+
+            document.getElementById('report-timestamp').textContent = `Corte generado: ${nowStr}`;
+            document.getElementById('print-report-date').textContent = `Fecha y hora de corte: ${nowStr}`;
+
+            // 1. KPIs Ejecutivos
+            document.getElementById('rep-kpi-units').textContent = metrics.totalUnits;
+            document.getElementById('rep-kpi-refs').textContent = `${appState.products.length} referencias activas`;
+            document.getElementById('rep-kpi-weight').textContent = `${metrics.totalWeightKg.toFixed(2)} kg`;
+            document.getElementById('rep-kpi-value').textContent = formatCurrency(metrics.totalValue);
+            
+            const totalCritical = metrics.outOfStockCount + metrics.lowStockCount;
+            document.getElementById('rep-kpi-critical').textContent = totalCritical;
+            document.getElementById('rep-kpi-critical-sub').textContent = `${metrics.outOfStockCount} agotados • ${metrics.lowStockCount} bajos`;
+
+            // 2. Desglose por Presentación
+            const presContainer = document.getElementById('rep-presentation-breakdown');
+            const presEntries = Object.entries(metrics.presentationMap);
+            if (presEntries.length === 0) {
+                presContainer.innerHTML = `<p class="text-xs text-slate-400 col-span-full">Sin datos disponibles</p>`;
+            } else {
+                presContainer.innerHTML = presEntries.map(([pres, data]) => `
+                    <div class="p-2.5 rounded-2xl bg-slate-50 border border-slate-200/70">
+                        <span class="text-[11px] font-extrabold text-indigo-700 bg-indigo-100/70 px-2 py-0.5 rounded-md">${pres}</span>
+                        <p class="text-base font-extrabold text-slate-900 mt-1.5">${data.units} <span class="text-[11px] font-medium text-slate-500">unds</span></p>
+                        <p class="text-[11px] font-semibold text-slate-500">${data.weightKg.toFixed(2)} kg</p>
+                    </div>
+                `).join('');
+            }
+
+            // 3. Barras horizontales por Sabor (ordenado por peso/stock descendente)
+            const flavorContainer = document.getElementById('rep-flavor-bars');
+            const flavorEntries = Object.entries(metrics.flavorMap).sort((a, b) => b[1].weightKg - a[1].weightKg || b[1].units - a[1].units);
+            
+            if (flavorEntries.length === 0) {
+                flavorContainer.innerHTML = `<p class="text-xs text-slate-400">No hay sabores registrados</p>`;
+            } else {
+                const maxWeight = Math.max(...flavorEntries.map(([, d]) => d.weightKg), 1);
+                flavorContainer.innerHTML = flavorEntries.map(([flavor, data]) => {
+                    const pct = Math.min(100, Math.round((data.weightKg / maxWeight) * 100));
+                    const barColor = data.units === 0 ? 'bg-red-500' : (data.hasAlert ? 'bg-amber-500' : 'bg-emerald-500');
+                    return `
+                        <div>
+                            <div class="flex items-center justify-between text-xs mb-1">
+                                <span class="font-bold text-slate-800">${data.emoji} ${flavor}</span>
+                                <span class="font-semibold text-slate-600">${data.units} unds • <strong class="text-slate-900">${data.weightKg.toFixed(2)} kg</strong></span>
+                            </div>
+                            <div class="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                                <div class="h-full ${barColor} rounded-full transition-all duration-500" style="width: ${pct}%"></div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            // 4. Tabla Detallada Filtrable
+            const filteredItems = metrics.items.filter(item => {
+                if (currentReportStatusFilter === 'ALL') return true;
+                return item.status === currentReportStatusFilter;
+            });
+
+            document.getElementById('rep-table-count').textContent = `${filteredItems.length} ítems`;
+
+            const tbody = document.getElementById('rep-table-body');
+            const tfoot = document.getElementById('rep-table-foot');
+
+            if (filteredItems.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="5" class="py-8 text-center text-slate-400 text-xs">
+                            No hay productos en esta categoría de estado.
+                        </td>
+                    </tr>
+                `;
+                tfoot.innerHTML = '';
+            } else {
+                let subUnits = 0;
+                let subWeight = 0;
+                let subValue = 0;
+
+                tbody.innerHTML = filteredItems.map(item => {
+                    subUnits += item.stock;
+                    subWeight += item.itemWeightKg;
+                    subValue += item.itemValue;
+
+                    let statusPill = '';
+                    if (item.status === 'OUT') {
+                        statusPill = `<span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-red-100 text-red-700">Agotado</span>`;
+                    } else if (item.status === 'LOW') {
+                        statusPill = `<span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-800">Bajo</span>`;
+                    } else {
+                        statusPill = `<span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-700">Óptimo</span>`;
+                    }
+
+                    return `
+                        <tr class="hover:bg-slate-50/80 transition">
+                            <td class="py-3 px-3.5">
+                                <div class="font-bold text-slate-900">${item.flavor} <span class="text-[11px] font-semibold text-slate-500">(${item.presentation})</span></div>
+                                <div class="text-[10px] text-slate-400 mt-0.5">Prod: ${item.produced} | Vend: ${item.sold}</div>
+                            </td>
+                            <td class="py-3 px-2 text-right font-extrabold text-slate-900">${item.stock}</td>
+                            <td class="py-3 px-2 text-right font-semibold text-slate-600">${item.itemWeightKg.toFixed(2)}k</td>
+                            <td class="py-3 px-2 text-right font-semibold text-slate-700">${formatCurrency(item.itemValue)}</td>
+                            <td class="py-3 px-3.5 text-center">${statusPill}</td>
+                        </tr>
+                    `;
+                }).join('');
+
+                tfoot.innerHTML = `
+                    <tr>
+                        <td class="py-3 px-3.5">TOTAL FILTRADO</td>
+                        <td class="py-3 px-2 text-right">${subUnits}</td>
+                        <td class="py-3 px-2 text-right">${subWeight.toFixed(2)} kg</td>
+                        <td class="py-3 px-2 text-right text-emerald-700">${formatCurrency(subValue)}</td>
+                        <td class="py-3 px-3.5 text-center">—</td>
+                    </tr>
+                `;
+            }
+
+            lucide.createIcons();
+        }
+
+        // Generar texto limpio del informe para WhatsApp o Portapapeles
+        function buildPlainTextReport() {
+            const metrics = getInventoryReportMetrics();
+            const nowStr = new Date().toLocaleString('es-CO', {
+                dateStyle: 'short',
+                timeStyle: 'short'
+            });
+
+            let lines = [
+                `📊 *INFORME DE INVENTARIO DE PULPAS*`,
+                `📅 Fecha: ${nowStr}`,
+                ``,
+                `*RESUMEN GENERAL:*`,
+                `📦 Total Unidades: *${metrics.totalUnits} unds*`,
+                `⚖️ Peso Neto Total: *${metrics.totalWeightKg.toFixed(2)} kg*`,
+                `💰 Valor Estimado: *${formatCurrency(metrics.totalValue)}*`,
+                `⚠️ Alertas: *${metrics.outOfStockCount} agotados / ${metrics.lowStockCount} stock bajo*`,
+                ``,
+                `*DETALLE POR PRODUCTO:*`
+            ];
+
+            metrics.items.forEach(item => {
+                const icon = item.status === 'OUT' ? '🔴' : (item.status === 'LOW' ? '🟡' : '🟢');
+                lines.push(`${icon} ${item.flavor} (${item.presentation}): *${item.stock} unds* (${item.itemWeightKg.toFixed(2)} kg)`);
+            });
+
+            lines.push(``);
+            lines.push(`_Generado con PulpaControl_`);
+            return lines.join('\n');
+        }
+
+        function shareReportWhatsApp() {
+            const text = buildPlainTextReport();
+            const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+            window.open(url, '_blank');
+        }
+
+        function copyReportToClipboard() {
+            const text = buildPlainTextReport();
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.select();
+            try {
+                document.execCommand('copy');
+                showToast('Informe copiado al portapapeles', 'success');
+            } catch (err) {
+                showToast('No se pudo copiar el texto', 'error');
+            }
+            document.body.removeChild(textarea);
+        }
+
+        // ==========================================
+        // EXPORTACIÓN A EXCEL (.XLSX) CON SHEETJS
+        // ==========================================
+        function exportToExcel() {
+            try {
+                if (typeof XLSX === 'undefined') {
+                    showToast('La librería de Excel aún está cargando, intenta de nuevo.', 'error');
+                    return;
+                }
+
+                const wb = XLSX.utils.book_new();
+                const today = getTodayISO();
+                const metrics = getInventoryReportMetrics();
+
+                // 1. HOJA: RESUMEN GENERAL
+                const totalProduced = appState.movements.filter(m => m.type === 'PROD').reduce((acc, m) => acc + Number(m.qty), 0);
+                const totalSold = appState.movements.filter(m => m.type === 'SALE').reduce((acc, m) => acc + Number(m.qty), 0);
+                const totalRevenue = appState.movements.filter(m => m.type === 'SALE').reduce((acc, m) => acc + (Number(m.total) || 0), 0);
+
+                const summaryData = [
+                    ['INFORME DE ESTADO ACTUAL DE INVENTARIO DE PULPAS'],
+                    ['Fecha de exportación:', today],
+                    [''],
+                    ['INDICADOR', 'VALOR'],
+                    ['Total Unidades en Stock Actual', metrics.totalUnits],
+                    ['Peso Total en Inventario (kg)', Number(metrics.totalWeightKg.toFixed(2))],
+                    ['Valorización Total del Inventario ($)', metrics.totalValue],
+                    ['Productos Agotados', metrics.outOfStockCount],
+                    ['Productos con Stock Bajo', metrics.lowStockCount],
+                    ['Total Unidades Producidas (Histórico)', totalProduced],
+                    ['Total Unidades Vendidas (Histórico)', totalSold],
+                    ['Ingresos por Ventas Registradas ($)', totalRevenue],
+                    ['Variedades / Referencias Activas', appState.products.length]
+                ];
+                const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+                wsSummary['!cols'] = [{ wch: 38 }, { wch: 22 }];
+                XLSX.utils.book_append_sheet(wb, wsSummary, 'Resumen General');
+
+                // 2. HOJA: ESTADO ACTUAL DE INVENTARIO
+                const inventoryRows = metrics.items.map(p => ({
+                    'Sabor / Fruta': p.flavor,
+                    'Presentación': p.presentation,
+                    'Stock Actual (Unds)': p.stock,
+                    'Peso Total (kg)': Number(p.itemWeightKg.toFixed(2)),
+                    'Alerta Stock Mínimo': p.minStock,
+                    'Estado': p.status === 'OUT' ? 'AGOTADO' : (p.status === 'LOW' ? 'STOCK BAJO' : 'ÓPTIMO'),
+                    'Precio Unitario Sugerido ($)': p.unitPrice,
+                    'Valorización Stock ($)': p.itemValue,
+                    'Total Producido (Unds)': p.produced,
+                    'Total Vendido (Unds)': p.sold
+                }));
+                const wsInventory = XLSX.utils.json_to_sheet(inventoryRows);
+                wsInventory['!cols'] = [
+                    { wch: 20 }, { wch: 15 }, { wch: 20 }, { wch: 16 }, { wch: 20 }, { wch: 15 }, { wch: 24 }, { wch: 22 }, { wch: 20 }, { wch: 20 }
+                ];
+                XLSX.utils.book_append_sheet(wb, wsInventory, 'Estado Actual Inventario');
+
+                // 3. HOJA: HISTORIAL DE PRODUCCIÓN
+                const prodMovements = appState.movements.filter(m => m.type === 'PROD');
+                const prodRows = prodMovements.length > 0 ? prodMovements.map(m => ({
+                    'Fecha': m.date,
+                    'Sabor / Fruta': m.flavor,
+                    'Presentación': m.presentation,
+                    'Cantidad Producida': Number(m.qty),
+                    'Lote': m.batchOrCustomer || '',
+                    'Observaciones': m.notes || ''
+                })) : [{ 'Mensaje': 'No hay registros de producción aún' }];
+                const wsProd = XLSX.utils.json_to_sheet(prodRows);
+                wsProd['!cols'] = [{ wch: 14 }, { wch: 20 }, { wch: 15 }, { wch: 20 }, { wch: 16 }, { wch: 30 }];
+                XLSX.utils.book_append_sheet(wb, wsProd, 'Historial de Producción');
+
+                // 4. HOJA: HISTORIAL DE VENTAS
+                const saleMovements = appState.movements.filter(m => m.type === 'SALE');
+                const saleRows = saleMovements.length > 0 ? saleMovements.map(m => ({
+                    'Fecha': m.date,
+                    'Sabor / Fruta': m.flavor,
+                    'Presentación': m.presentation,
+                    'Cantidad Vendida': Number(m.qty),
+                    'Precio Unitario ($)': Number(m.price) || 0,
+                    'Total Venta ($)': Number(m.total) || 0,
+                    'Cliente / Canal': m.batchOrCustomer || ''
+                })) : [{ 'Mensaje': 'No hay registros de ventas aún' }];
+                const wsSales = XLSX.utils.json_to_sheet(saleRows);
+                wsSales['!cols'] = [{ wch: 14 }, { wch: 20 }, { wch: 15 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 24 }];
+                XLSX.utils.book_append_sheet(wb, wsSales, 'Historial de Ventas');
+
+                // Descargar archivo Excel
+                const fileName = `Inventario_Pulpas_${today}.xlsx`;
+                XLSX.writeFile(wb, fileName);
+                showToast('Archivo Excel descargado con éxito', 'success');
+
+            } catch (error) {
+                console.error('Error exportando Excel:', error);
+                showToast('Ocurrió un error al generar el Excel', 'error');
+            }
+        }
+
+        // ==========================================
+        // RESPALDO Y RESTAURACIÓN JSON
+        // ==========================================
+        function openBackupModal() {
+            const modal = document.getElementById('modal-backup');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeBackupModal() {
+            const modal = document.getElementById('modal-backup');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function downloadJSONBackup() {
+            const dataStr = JSON.stringify(appState, null, 2);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Respaldo_Pulpas_${getTodayISO()}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast('Copia de seguridad descargada', 'success');
+            closeBackupModal();
+        }
+
+        function restoreJSONBackup(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const parsed = JSON.parse(e.target.result);
+                    if (Array.isArray(parsed.products) && Array.isArray(parsed.movements)) {
+                        appState = parsed;
+                        saveState();
+                        renderAll();
+                        closeBackupModal();
+                        showToast('Datos restaurados correctamente', 'success');
+                    } else {
+                        showToast('El archivo no tiene un formato válido', 'error');
+                    }
+                } catch (err) {
+                    showToast('Error al leer el archivo de respaldo', 'error');
+                }
+            };
+            reader.readAsText(file);
+            event.target.value = '';
+        }
+
+        // ==========================================
+        // NOTIFICACIONES TOAST (SIN ALERT)
+        // ==========================================
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            let bgClass = 'bg-slate-900 text-white';
+            let iconName = 'check-circle';
+            
+            if (type === 'success') {
+                bgClass = 'bg-emerald-700 text-white';
+                iconName = 'check-circle-2';
+            } else if (type === 'error') {
+                bgClass = 'bg-red-600 text-white';
+                iconName = 'alert-circle';
+            } else if (type === 'info') {
+                bgClass = 'bg-slate-800 text-white';
+                iconName = 'info';
+            }
+
+            toast.className = `${bgClass} px-4 py-3 rounded-2xl shadow-lg flex items-center gap-2.5 text-sm font-semibold max-w-sm w-full animate-fade-in pointer-events-auto`;
+            toast.innerHTML = `
+                <i data-lucide="${iconName}" class="w-5 h-5 shrink-0"></i>
+                <span class="leading-snug">${message}</span>
+            `;
+
+            container.appendChild(toast);
+            lucide.createIcons();
+
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(-6px)';
+                toast.style.transition = 'all 0.25s ease';
+                setTimeout(() => toast.remove(), 250);
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
