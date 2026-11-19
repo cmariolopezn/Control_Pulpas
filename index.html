@@ -754,12 +754,12 @@ class="w-full p-4 bg-red-50 hover:bg-red-100 border border-red-200 rounded-2xl f
                     // Catálogo inicial por defecto para comenzar rápido (presentación estándar 400gr)
                     const today = getTodayISO();
                     appState.products = [
-                        { id: 'p1', flavor: 'Mango', presentation: '400gr', stock: 24, minStock: 10, defaultPrice: 4500, emoji: '🥭' },
-                        { id: 'p2', flavor: 'Mora', presentation: '400gr', stock: 18, minStock: 10, defaultPrice: 4200, emoji: '🫐' },
-                        { id: 'p3', flavor: 'Maracuyá', presentation: '400gr', stock: 8, minStock: 10, defaultPrice: 5000, emoji: '🟡' },
-                        { id: 'p4', flavor: 'Lulo', presentation: '400gr', stock: 15, minStock: 8, defaultPrice: 4800, emoji: '🟢' },
-                        { id: 'p5', flavor: 'Guanábana', presentation: '1kg', stock: 12, minStock: 6, defaultPrice: 8500, emoji: '🍈' },
-                        { id: 'p6', flavor: 'Fresa', presentation: '400gr', stock: 0, minStock: 10, defaultPrice: 4800, emoji: '🍓' }
+                        { id: 'p1', flavor: 'Mango', presentation: '400gr', stock: 24, minStock: 10, defaultPrice: 4000, emoji: '🥭' },
+                        { id: 'p2', flavor: 'Mora', presentation: '400gr', stock: 18, minStock: 10, defaultPrice: 4000, emoji: '🫐' },
+                        { id: 'p3', flavor: 'Maracuyá', presentation: '400gr', stock: 8, minStock: 10, defaultPrice: 4000, emoji: '🟡' },
+                        { id: 'p4', flavor: 'Lulo', presentation: '400gr', stock: 15, minStock: 8, defaultPrice: 4000, emoji: '🟢' },
+                        { id: 'p5', flavor: 'Guanábana', presentation: '1kg', stock: 12, minStock: 6, defaultPrice: 4000, emoji: '🍈' },
+                        { id: 'p6', flavor: 'Fresa', presentation: '400gr', stock: 0, minStock: 10, defaultPrice: 4000, emoji: '🍓' }
                     ];
                     appState.movements = [
                         { id: 'm1', type: 'PROD', productId: 'p1', flavor: 'Mango', presentation: '400gr', qty: 30, price: 0, total: 0, batchOrCustomer: 'L-001', notes: 'Producción inicial', date: today, createdAt: Date.now() - 3600000 },
