@@ -1666,11 +1666,17 @@ function editProductPrice(productId) {
             return lines.join('\n');
         }
 
-        function shareReportWhatsApp() {
-            const text = buildPlainTextReport();
-            const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
-            window.open(url, '_blank');
-        }
+function shareReportWhatsApp() {
+
+    const numero = '573108277784'; // CAMBIA POR TU NÚMERO
+
+    const text = buildPlainTextReport();
+
+    const url =
+        `https://wa.me/${numero}?text=${encodeURIComponent(text)}`;
+
+    window.open(url, '_blank');
+}
 
         function copyReportToClipboard() {
             const text = buildPlainTextReport();
